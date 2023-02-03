@@ -1,0 +1,23 @@
+dataset:
+  margherita:
+    topping: [mozzarella, basil, tomatoes]
+    sizes: [xl, normal]
+    ingredients: 3
+    evening_drink: white wine
+  inferno:
+    topping: [gouda, oregano, ham, tomatoes, chili, jalapeno, tabasco]
+    sizes: [xl, normal]
+    spicy: true
+    ingredients: 7
+    evening_drink: water
+  hawaii:
+    topping: [gouda, basil, pineapple, ham]
+    sizes: [normal]
+    ingredients: 4
+    evening_drink: white wine
+#features:
+#  topping: set
+#  sizes: set
+#  spicy: flag
+#  ingredients: number
+#  evening_drink: value
