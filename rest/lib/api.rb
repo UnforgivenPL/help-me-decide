@@ -30,7 +30,7 @@ module UnforgivenPL
     # reference implementation of the api
     class Api < Sinatra::Application
 
-      DATASET_DIRECTORY = 'datasets'
+      DATASET_DIRECTORY = ENV['HMD_DATASET_DIRECTORY'] || 'datasets'
       DATASET_FILE = 'dataset.yml'
       DEFINITIONS_FILE = 'definitions.yml'
       APPLICATION_VERSION = 'HelpMeDecide 0.1.0'
