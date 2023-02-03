@@ -73,6 +73,10 @@ module UnforgivenPL
         throw(:halt, [500, 'server filesystem error - no dataset directory']) unless Dir.exist?(DATASET_DIRECTORY)
       end
 
+      get '/' do
+        APPLICATION_VERSION
+      end
+
       get '/version' do
         APPLICATION_VERSION
       end
