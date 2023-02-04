@@ -5,6 +5,7 @@
 /coverage/
 /gem/coverage
 /rest/coverage
+/rest/superuser.yml
 /InstalledFiles
 /pkg/
 /spec/reports/
@@ -13,6 +14,7 @@
 /test/version_tmp/
 /tmp/
 rest/datasets/
+
 
 # Used by dotenv library to load environment variables.
 # .env
