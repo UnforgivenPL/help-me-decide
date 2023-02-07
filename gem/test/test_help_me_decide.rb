@@ -195,7 +195,16 @@ class EngineTest < Minitest::Test
   def test_find_duplicates
     assert_empty PIZZAS.find_duplicates
     assert_equal %w{id other}, { 'id' => { 'foo' => 'bar' }, 'other' => { 'foo' => 'bar' } }.extend(Dataset).find_duplicates
-    assert_equal %w{id other}, { 'id' => { 'foo' => 'bar' }, 'good' => { 'bar' => 'foo'}, 'other' => { 'foo' => 'bar' } }.extend(Dataset).find_duplicates
+    assert_equal %w{id other}, { 'id' => { 'foo' => 'bar' }, 'good' => { 'bar' => 'foo' }, 'other' => { 'foo' => 'bar' } }.extend(Dataset).find_duplicates
+  end
+
+  def test_find_missing
+    assert_empty PIZZAS.find_missing
+    assert_equal({ 'f2' => ['one'] }, { 'one' => { 'f1' => 'foo' }, 'two' => { 'f2' => 'bars' }, 'three' => { 'f2' => 'fomp' } }.extend(Dataset).find_missing)
+  end
+
+  def test_numbers_strings_irrelevant
+    assert_equal PIZZAS.filter({ 'ingredients' => 4 }), PIZZAS.filter({ 'ingredients' => '4' })
   end
 
   def test_feature_defs_extensions

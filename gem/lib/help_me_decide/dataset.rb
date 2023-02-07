@@ -53,6 +53,9 @@ module UnforgivenPL
       # finds items that have different ids, but identical feature sets
       def find_duplicates = select { |id, features| any? { |i, f| i != id && features == f } }.keys
 
+      # finds items that are missing value properties (flags can be missing)
+      def find_missing = Hash[definitions.values.select { |d| d.type == :value || d.type == :number }.map { |d| [d.name, keys.filter { |k| !self[k].keys.include?(d.name) }] }].reject { |_, value| value.empty? }
+
     end
   end
 end

@@ -3,7 +3,7 @@
 Gem::Specification.new do |g|
   g.name = 'help_me_decide'
   g.version = '0.1.0'
-  g.licenses = ['Apache 2']
+  g.licenses = ['Apache-2.0']
   g.summary = 'A question-based filtering tool to navigate through datasets.'
   g.author = 'Miki / Unforgiven.pl'
   g.email = 'support@unforgiven.pl'

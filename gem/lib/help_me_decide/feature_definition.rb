@@ -26,7 +26,12 @@ module UnforgivenPL
       def ==(other) = other.is_a?(FeatureDefinition) && other.name == @name && other.type == @type && ((other.values.nil? && @values.nil?) || (other.values.is_a?(Array) && @values.is_a?(Array) && @values & other.values == @values))
 
       # checks whether a given thing matches this feature with the given value (either it includes the value, all of the values, or the value is equal to the given parameter, or the feature is a flag, value is not matching and the thing does not have it)
-      def matches?(thing, value) = (thing[name].is_a?(Array) && (thing[name].include?(value) || (value.is_a?(Array) && value.all? { |v| thing[name].include?(v) }))) || (thing[name] == value) || (type == :flag && thing[name].nil? && !values.include?(value))
+      def matches?(thing, value)
+        (thing[name].is_a?(Array) && (thing[name].include?(value) || (value.is_a?(Array) && value.all? { |v| thing[name].include?(v) }))) ||
+          (thing[name] == value) ||
+          (type == :flag && thing[name].nil? && !values.include?(value)) ||
+          (type == :number && thing[name].to_s == value)
+      end
 
       # for the current feature, returns a map of value => matching dataset ids for each value
       def organise(dataset = {})

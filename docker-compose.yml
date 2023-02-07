@@ -1,0 +1,7 @@
+---
+services:
+  help-me-decide:
+    build: .
+    command: "bundle exec rackup --host :: -p 9991"
+    ports:
+      - "9991:9991"

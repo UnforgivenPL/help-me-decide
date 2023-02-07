@@ -17,6 +17,14 @@ class String
     else self
     end
   end
+
+  def maybe_raw
+    if self =~ /d+/
+      to_i
+    else
+      perhaps_as_bool
+    end
+  end
 end
 
 # open Array to unwrap the first element (ensuring it is a bool, if possible)
@@ -37,7 +45,9 @@ module UnforgivenPL
 
       def authorise!(operation, dataset_id = nil)
         throw(:halt, [500, 'no authorisation method provided; implement :valid_user? and :user_allowed?']) unless respond_to?(:valid_user?) && respond_to?(:user_allowed?)
-        access_token = request.env['Authorization']&.[](7..-1)
+        actual_header = request.env['HTTP_AUTHORIZATION']
+        actual_header = request.env['Authorization'] if actual_header&.empty?
+        access_token = actual_header&.[](7..-1)
         throw(:halt, [401, 'unauthenticated']) unless valid_user?(access_token)
         throw(:halt, [403, 'invalid user']) unless user_allowed?(access_token, operation, dataset_id)
         true
@@ -52,6 +62,9 @@ module UnforgivenPL
         dataset = incoming['dataset'].extend(UnforgivenPL::HelpMeDecide::Dataset)
         duplicates = dataset.find_duplicates
         return [422, JSON.dump(duplicates)] unless duplicates.empty?
+
+        incorrect = dataset.find_missing
+        return [422, JSON.dump(incorrect)] unless incorrect.empty?
 
         definition = dataset.definitions
 
@@ -151,7 +164,7 @@ module UnforgivenPL
 
       get %r{/questions/([a-fA-F0-9]{40})} do |id|
         authorise!(:questions, id)
-        answers = read_answers(request)
+        answers = Hash[read_answers(request).map { |key, value| [k, value.to_s.maybe_raw] }]
         dataset, definitions = read_dataset(id, answers)
 
         json({'definition' => definitions.pure, 'dataset' => dataset, 'strategies' => UnforgivenPL::HelpMeDecide::Strategies::AVAILABLE_STRATEGIES, 'questions' => dataset.questions, 'answers' => answers})
