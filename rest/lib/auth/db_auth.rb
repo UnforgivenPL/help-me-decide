@@ -19,6 +19,8 @@ module UnforgivenPL
     # opens Api to allow user auth through a database
     module DbAuth
 
+      ADMIN_USER_TIER = 9000
+
       def user?(token) = (@user = User.where({ token:, active: true, verified: true }).first)
 
       def dataset?(token) = (@dataset = DatasetInfo.where({ token:, enabled: true }).first)
@@ -39,10 +41,10 @@ module UnforgivenPL
 
         result = case operation
                  when :dataset_list then @user
-                 when :dataset_new then @user && DatasetInfo.where(user_id: @user.id, enabled: true).count < @user.dataset_quota
+                 when :dataset_new then @user && (DatasetInfo.where(user_id: @user.id, enabled: true).count < @user.dataset_quota || @user.tier > ADMIN_USER_TIER)
                  when :dataset_get, :questions, :question then @dataset && ((@user && @dataset.user_id == @user.id) || @dataset.folder == id)
                  when :dataset_delete then @dataset && @user && @dataset.user_id == @user.id
-                 when :dataset_slice then @dataset && @user && @dataset.user_id == @user.id && DatasetInfo.where(user_id: @user.id, enabled: true).count < @user.dataset_quota
+                 when :dataset_slice then @dataset && @user && @dataset.user_id == @user.id && (DatasetInfo.where(user_id: @user.id, enabled: true).count < @user.dataset_quota || @user.tier > ADMIN_USER_TIER)
                  else false
                  end
         if result && @dataset
