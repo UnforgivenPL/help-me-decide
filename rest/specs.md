@@ -32,6 +32,17 @@ datasets are immutable
 200 when successful; result has `dataset` of a given id, its `definition`, and available `strategies` (an non-empty array of strategy names available, with the first one being the default)
 404 when there is no dataset of the given id
 
+## `PUT /dataset/{id}`
+
+body **may** contain an array of ids to be filtered out
+returns the id of a slice of the dataset with the given id, such that it does not contain any of the items passed in the request body
+(basically creates a new dataset or finds an existing dataset that is a subset of the given dataset)
+200 and the id of the sliced dataset if successful
+204 when the dataset is empty after filtering out
+400 when the body is not an array or is an empty array
+404 when there is no dataset of the given id
+
+
 ## `POST /dataset`
 
 body **must** contain a `dataset` that is a proper dataset
@@ -41,6 +52,7 @@ creates a new dataset
 400 when the dataset has an error or there is no dataset
 409 when identical dataset already exists
 422 when the dataset contains two or more items with different ids, but the same features (response will be json with an array of whatever ids are duplicates)
+422 when the dataset contains items which do not have required features (response will be json map with keys as features and values as arrays of ids that are incorrect)
 (not yet: 409 when the definition does not match the dataset)
 
 ## `DELETE /dataset/{id}`
@@ -63,7 +75,7 @@ request parameters should be all previously asked questions (question=answer&que
 404 when dataset of the given id not found
 409 when the given answers do not fit the dataset
 
-## `PUT /questions/{id}`
+## `GET /questions/{id}`
 
 request parameters should be all previously asked questions (question=answer&question=answer...)
 200 when successful; result has `questions` with all available next questions (if any), `answers` with all answers so far, a `dataset` with whatever is the dataset at this stage and its `definition`, and available `strategies`

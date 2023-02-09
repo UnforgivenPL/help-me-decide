@@ -42,6 +42,7 @@ module UnforgivenPL
                  when :dataset_new then @user && DatasetInfo.where(user_id: @user.id, enabled: true).count < @user.dataset_quota
                  when :dataset_get, :questions, :question then @dataset && ((@user && @dataset.user_id == @user.id) || @dataset.folder == id)
                  when :dataset_delete then @dataset && @user && @dataset.user_id == @user.id
+                 when :dataset_slice then @dataset && @user && @dataset.user_id == @user.id && DatasetInfo.where(user_id: @user.id, enabled: true).count < @user.dataset_quota
                  else false
                  end
         if result && @dataset

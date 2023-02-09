@@ -22,6 +22,10 @@ USER_ALICE   = User.new(name: 'alice', pass: 'a_password', email: 'alice@example
 USER_BOB     = User.new(name: 'bob', pass: 'another password', email: 'bob@example.org', token: TOKEN_BOB, verified: true, active: true, dataset_quota: 0)
 [NON_VERIFIED, NON_ACTIVE, USER_ALICE, USER_BOB].each(&:save)
 
+class DbAuthApi < UnforgivenPL::HelpMeDecide::Api
+  include UnforgivenPL::HelpMeDecide::DbAuth
+end
+
 class DbAuthTest < Minitest::Test
 
   include Rack::Test::Methods
@@ -34,7 +38,7 @@ class DbAuthTest < Minitest::Test
   end
 
   def app
-    UnforgivenPL::HelpMeDecide::Api.include(UnforgivenPL::HelpMeDecide::DbAuth)
+    DbAuthApi
   end
 
   def setup
@@ -121,6 +125,24 @@ class DbAuthTest < Minitest::Test
       requests_left -= 2
       assert_equal requests_left, DatasetInfo.find_by(folder: TEST_DATASET_ID)&.request_quota
     end
+  end
+
+  def test_slice_dataset
+    upload_test_dataset
+    operation = ->(token) { put "/dataset/#{TEST_DATASET_ID}", JSON.dump(['margherita']), { 'Authorization' => "Bearer #{token}" } }
+    unauthorised(TOKEN_INVALID, TOKEN_NV, TOKEN_NA, &operation)
+    forbidden(TOKEN_BOB, &operation)
+    allowed(TOKEN_ALICE, &operation)
+    sliced_id = last_response.body
+    assert sliced_id.size == 40
+    # slicing should reduce number of requests
+    assert_equal 999, DatasetInfo.find_by(folder:TEST_DATASET_ID)&.request_quota
+
+    # now it should be ok to fetch the sliced dataset
+    operation = ->(token) { get "/dataset/#{sliced_id}", nil, { 'Authorization' => "Bearer #{token}" } }
+    unauthorised(TOKEN_INVALID, TOKEN_NV, TOKEN_NA, &operation)
+    forbidden(TOKEN_BOB, &operation)
+    allowed(TOKEN_ALICE, &operation)
   end
 
   def test_delete_dataset

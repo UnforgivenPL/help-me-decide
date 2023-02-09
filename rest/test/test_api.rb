@@ -14,6 +14,10 @@ require 'json'
 require 'api'
 require 'auth/no_auth'
 
+class NoAuthApi < UnforgivenPL::HelpMeDecide::Api
+  include UnforgivenPL::HelpMeDecide::NoAuth
+end
+
 class ApiTest < Minitest::Test
   include Rack::Test::Methods
 
@@ -21,7 +25,7 @@ class ApiTest < Minitest::Test
   TEST_DATASET_ID = '3c2e6520920c39ffe932f7630445c48eaf342efc'.freeze
 
   def app
-    UnforgivenPL::HelpMeDecide::Api.include(UnforgivenPL::HelpMeDecide::NoAuth)
+    NoAuthApi
   end
 
   def upload_test_dataset
@@ -64,7 +68,7 @@ class ApiTest < Minitest::Test
     dataset = upload_test_dataset
     get "/questions/#{TEST_DATASET_ID}"
     assert_equal 200, last_response.status
-    assert_equal(dataset.questions, JSON.parse(last_response.body)['questions'].transform_values { |v| v.transform_keys {|k| k=~/\d+/ ? k.to_i : k.perhaps_as_bool } })
+    assert_equal(dataset.questions, JSON.parse(last_response.body)['questions'].transform_values { |v| v.transform_keys { |k| k =~ /\d+/ ? k.to_i : k.perhaps_as_bool } })
     get "/questions/#{TEST_DATASET_ID.reverse}"
     assert_equal 404, last_response.status
     # now with answers
@@ -165,6 +169,20 @@ class ApiTest < Minitest::Test
     get "/question/#{TEST_DATASET_ID}/first_question?topping=gouda"
     assert_equal 200, last_response.status
     assert_equal actual, last_response.body
+  end
+
+  def test_slices
+    dataset = upload_test_dataset
+    get "/dataset/#{TEST_DATASET_ID}"
+    assert_equal 200, last_response.status
+
+    put "/dataset/#{TEST_DATASET_ID}", JSON.dump(['inferno'])
+    assert_equal 200, last_response.status
+    new_id = last_response.body
+
+    get "/dataset/#{new_id}"
+    assert_equal 200, last_response.status
+    assert_equal dataset.slice('margherita', 'hawaii'), JSON.parse(last_response.body)['dataset']
   end
 
 end

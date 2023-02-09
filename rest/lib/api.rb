@@ -18,13 +18,7 @@ class String
     end
   end
 
-  def maybe_raw
-    if self =~ /d+/
-      to_i
-    else
-      perhaps_as_bool
-    end
-  end
+  def maybe_raw = self =~ /\d+/ ? to_i : perhaps_as_bool
 end
 
 # open Array to unwrap the first element (ensuring it is a bool, if possible)
@@ -45,8 +39,7 @@ module UnforgivenPL
 
       def authorise!(operation, dataset_id = nil)
         throw(:halt, [500, 'no authorisation method provided; implement :valid_user? and :user_allowed?']) unless respond_to?(:valid_user?) && respond_to?(:user_allowed?)
-        actual_header = request.env['HTTP_AUTHORIZATION']
-        actual_header = request.env['Authorization'] if actual_header&.empty?
+        actual_header = request.env['HTTP_AUTHORIZATION'] || request.env['Authorization'] || ''
         access_token = actual_header&.[](7..-1)
         throw(:halt, [401, 'unauthenticated']) unless valid_user?(access_token)
         throw(:halt, [403, 'invalid user']) unless user_allowed?(access_token, operation, dataset_id)
@@ -142,7 +135,23 @@ module UnforgivenPL
         throw(:halt, 204) if dataset.empty?
 
         [dataset, dataset.definitions]
+      end
 
+      put %r{/dataset/([a-fA-F0-9]{40})} do |id|
+        authorise!(:dataset_slice, id)
+        dataset, = read_dataset(id)
+        request.body.rewind
+        raw_data = request.body.read
+        throw(:halt, [400, 'request body must not be empty']) if raw_data.empty?
+
+        filters = JSON.parse(raw_data) rescue throw(:halt, [400, 'incorrect request body'])
+
+        throw(:halt, [400, 'request body must be an array']) unless filters.is_a?(Array)
+
+        sliced = dataset.except(*filters)
+        throw(:halt, 204) if sliced.empty?
+
+        save_dataset({ 'dataset' => sliced })
       end
 
       get %r{/dataset/([a-fA-F0-9]{40})} do |id|
@@ -164,7 +173,7 @@ module UnforgivenPL
 
       get %r{/questions/([a-fA-F0-9]{40})} do |id|
         authorise!(:questions, id)
-        answers = Hash[read_answers(request).map { |key, value| [k, value.to_s.maybe_raw] }]
+        answers = read_answers(request).transform_values { |value| value.to_s.maybe_raw }
         dataset, definitions = read_dataset(id, answers)
 
         json({'definition' => definitions.pure, 'dataset' => dataset, 'strategies' => UnforgivenPL::HelpMeDecide::Strategies::AVAILABLE_STRATEGIES, 'questions' => dataset.questions, 'answers' => answers})
