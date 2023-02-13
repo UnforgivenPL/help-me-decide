@@ -9,6 +9,11 @@ end
 # holds a dataset info
 class DatasetInfo < ActiveRecord::Base
 
+  def enable_and_save
+    self.enabled = true
+    save
+  end
+
   def to_s = "(folder: #{folder}, user: #{user_id})"
 
 end
@@ -55,13 +60,15 @@ module UnforgivenPL
       end
 
       def dataset_created(_, _, fingerprint)
-        DatasetInfo.new(folder: fingerprint, enabled: true, user_id: @user.id, token: fingerprint).save if @user && fingerprint && !fingerprint.empty?
+        (DatasetInfo.find_by(user_id: @user.id, enabled: false) || DatasetInfo.new(folder: fingerprint, enabled: true, user_id: @user.id, token: fingerprint)).enable_and_save if @user && fingerprint && !fingerprint.empty?
       end
 
       def dataset_deleted(id)
         throw(:halt, [500, 'dataset to delete is different than the one authorised']) unless @dataset.folder == id
 
-        @dataset.delete
+        # no hard deleting of records, only disabling
+        @dataset.enabled = false
+        @dataset.save
         @dataset = nil
       end
 

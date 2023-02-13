@@ -147,16 +147,26 @@ class DbAuthTest < Minitest::Test
 
   def test_delete_dataset
     upload_test_dataset
+
     operation = ->(token) { delete "/dataset/#{TEST_DATASET_ID}", nil, { 'Authorization' => "Bearer #{token}" } }
     unauthorised(TOKEN_INVALID, TOKEN_NV, TOKEN_NA, &operation)
     forbidden(TOKEN_BOB, &operation)
     no_content(TOKEN_ALICE, &operation)
-    assert_nil DatasetInfo.find_by(folder: TEST_DATASET_ID)
-    # deleting should not be possible with dataset token, only with user token
+    assert_nil DatasetInfo.find_by(folder: TEST_DATASET_ID, enabled: true)
+    dataset = DatasetInfo.find_by(folder: TEST_DATASET_ID, enabled: false)
+
+    # reduce the number of requests to some number
+    dataset.request_quota = 200
+    dataset.save
+
     upload_test_dataset
+    # after uploading a previously deleted dataset the record should be reused
+    other = DatasetInfo.find_by(folder: TEST_DATASET_ID, enabled: true)
+    assert_equal dataset.id, other.id
+    assert_equal dataset.request_quota, other.request_quota
+    # deleting should not be possible with dataset token, only with user token
     forbidden(TEST_DATASET_ID, &operation)
     assert DatasetInfo.find_by(folder: TEST_DATASET_ID)
   end
-
 
 end

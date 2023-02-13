@@ -63,7 +63,8 @@ module UnforgivenPL
 
         dataset_yaml = dataset.to_yaml
 
-        fingerprint = Digest::SHA1.hexdigest(dataset_yaml)
+        fingerprint = respond_to?(:dataset_fingerprint) ? dataset_fingerprint(dataset) : Digest::SHA1.hexdigest(dataset_yaml)
+
         return [500, 'directory already exists; problem reported'] if Dir.exist?(File.join(DATASET_DIRECTORY, fingerprint))
 
         return [500, 'filesystem error; problem reported'] unless Dir.mkdir(File.join(DATASET_DIRECTORY, fingerprint))
