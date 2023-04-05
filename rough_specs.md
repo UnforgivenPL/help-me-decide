@@ -28,6 +28,9 @@ if they are absent, the following assumptions are made:
 * if all values are numbers, feature is a number
 * otherwise, a feature is a single value and all encountered values are considered a set of possible values
 
+all possible values must begin with a letter or a number
+(currently only `< > ! -` are strictly forbidden, but just for the future anything non-letter/non-digit is disallowed)
+
 note that it is thus impossible for a feature to be guessed as a free text
 
 # selection narrowing

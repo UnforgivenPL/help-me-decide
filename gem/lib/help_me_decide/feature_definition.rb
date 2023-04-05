@@ -1,16 +1,47 @@
 # frozen_string_literal: true
 
+# hmd search method to capture all possible search criteria
+class Array
+  # array search for hmd
+  def hmd_search(search)
+    # must include search
+    include?(search) ||
+      # if search is an array, it must contain everything in search, and not contain stuff prefixed with -
+      (search.is_a?(Array) && search.all? { |v| v[0] == '-' ? !include?(v[1..]) : include?(v) }) ||
+      # if search is a string prefixed with a -, then it must not be contained
+      (search.is_a?(String) && search[0] == '-' && !include?(search[1..]))
+  end
+end
+
+# adds useful method to a string: replace it with a value from map (if defined) or keep as is
+class String
+  # if this is contained in the given map, returns the value from the map, otherwise returns itself
+  def replace_with(what = {})= what[self] || self
+end
+
+# adds integer expression matching (<X >X !X)
+class Integer
+  # hmd matching
+  def hmd_match(search)
+    to_s == search ||
+      (search.is_a?(String) && search =~ /([<>!])(\d+)/ && send(::Regexp.last_match(1).replace_with({ '!' => '!=' }),
+                                                                ::Regexp.last_match(2).to_i))
+  end
+end
+
 module UnforgivenPL
   module HelpMeDecide
     # defines a feature (name, type and allowed values)
     class FeatureDefinition
       ALLOWED_FEATURE_TYPES = %i[set value flag number text].freeze
+      DISALLOWED_VALUE_PREFIXES = %w[< > ! -].freeze
 
       attr_accessor :name, :type, :values
 
       def initialize(name, type, values = [])
         super()
         raise ArgumentError unless ALLOWED_FEATURE_TYPES.include?(type) && name && values.is_a?(Array)
+        raise ArgumentError if values.any? { |v| v.nil? || (v.is_a?(String) && DISALLOWED_VALUE_PREFIXES.include?(v[0])) }
 
         @name = name
         @type = type
@@ -27,10 +58,10 @@ module UnforgivenPL
 
       # checks whether a given thing matches this feature with the given value (either it includes the value, all of the values, or the value is equal to the given parameter, or the feature is a flag, value is not matching and the thing does not have it)
       def matches?(thing, value)
-        (thing[name].is_a?(Array) && (thing[name].include?(value) || (value.is_a?(Array) && value.all? { |v| thing[name].include?(v) }))) ||
+        (thing[name].is_a?(Array) && thing[name].hmd_search(value)) ||
           (thing[name] == value) ||
           (type == :flag && thing[name].nil? && !values.include?(value)) ||
-          (type == :number && thing[name].to_s == value)
+          (type == :number && thing[name].is_a?(Integer) && thing[name].hmd_match(value))
       end
 
       # for the current feature, returns a map of value => matching dataset ids for each value

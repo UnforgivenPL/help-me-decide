@@ -25,13 +25,18 @@ class EngineTest < Minitest::Test
       FeatureDefinition.new('something', 'unknown')
     end
     assert_raises ArgumentError do
-      FeatureDefinition.new(nil , :value)
+      FeatureDefinition.new(nil, :value)
     end
     assert_raises TypeError do
       FeatureDefinition.from('something', 'something')
     end
     assert_raises ArgumentError do
-      FeatureDefinition.from(nil , [])
+      FeatureDefinition.from(nil, [])
+    end
+    (%w[-incorrect <wrong >5 !] << nil).each do |wrong|
+      assert_raises ArgumentError do
+        FeatureDefinition.new('something', :value, ['acceptable', wrong, 'correct'])
+      end
     end
   end
 
@@ -57,7 +62,7 @@ class EngineTest < Minitest::Test
       %w[makes no sense].extend(Dataset)
     end
     assert_raises TypeError do
-      {'value' => 'must be an array'}.extend(Dataset)
+      { 'value' => 'must be an array' }.extend(Dataset)
     end
   end
 
@@ -78,6 +83,23 @@ class EngineTest < Minitest::Test
     assert_raises TypeError do
       PIZZAS.filter(%w[makes no sense])
     end
+  end
+
+  def test_negative_array_filters
+    assert_equal PIZZAS.slice('margherita', 'hawaii'), PIZZAS.filter({ 'topping' => '-oregano' })
+    assert_equal PIZZAS.slice('inferno'), PIZZAS.filter({ 'topping' => %w[gouda -basil] })
+    assert_empty PIZZAS.filter({ 'topping' => %w[gouda -ham] })
+    assert_equal PIZZAS, PIZZAS.filter({ 'topping' => '-corn' })
+  end
+
+  def test_range_number_filters
+    assert_equal PIZZAS.slice('margherita', 'hawaii'), PIZZAS.filter({ 'ingredients' => '<5' })
+    assert_equal PIZZAS.slice('inferno'), PIZZAS.filter({ 'ingredients' => '>5' })
+    assert_equal PIZZAS.slice('margherita', 'inferno'), PIZZAS.filter({ 'ingredients' => '!4' })
+  end
+
+  def test_composite_filters
+    assert_equal PIZZAS.slice('margherita'), PIZZAS.filter({ 'ingredients' => '<5', 'topping' => '-gouda' })
   end
 
   def test_features_match

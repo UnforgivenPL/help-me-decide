@@ -19,6 +19,8 @@ class String
   end
 
   def maybe_raw = self =~ /\d+/ ? to_i : perhaps_as_bool
+
+  def begin_with_alphanum? = self[0].match?(/\p{Alnum}/)
 end
 
 # open Array to unwrap the first element (ensuring it is a bool, if possible)
@@ -51,6 +53,7 @@ module UnforgivenPL
         return [400, 'missing dataset'] unless incoming['dataset']
         return [400, 'dataset must be a non-empty map'] unless incoming['dataset'].is_a?(Hash) && !incoming['dataset'].empty?
         return [400, 'all items in the dataset must have an id and features'] if incoming['dataset'].any? { |id, value| value.nil? || !value.is_a?(Hash) || value.empty? || id.empty? }
+        return [400, 'all feature value in the dataset must begin with a letter or a digit'] if incoming['dataset'].any? { |_, things| things.values.any? { |v| (v.is_a?(String) && !v.begin_with_alphanum?) || (v.is_a?(Array) && v.any? { |k| k.is_a?(String) && !k.begin_with_alphanum? } ) } }
 
         dataset = incoming['dataset'].extend(UnforgivenPL::HelpMeDecide::Dataset)
         duplicates = dataset.find_duplicates

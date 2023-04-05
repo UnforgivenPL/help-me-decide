@@ -112,7 +112,7 @@ class ApiTest < Minitest::Test
   def test_various_failures
     post '/dataset'
     assert_equal 400, last_response.status
-    [{}, { 'dataset' => {} }, { 'dataset' => 'nah' }, { 'dataset' => [] }, { 'id' => 'nah' }, { 'dataset' => { 'id' => '' } }, 'something something', %w[completely nonsensical]].each do |data|
+    [{}, { 'dataset' => {} }, { 'dataset' => 'nah' }, { 'dataset' => [] }, { 'id' => 'nah' }, { 'dataset' => { 'id' => '' } }, { 'dataset' => { 'id' => { 'feature' => %w[?invalid valid] } } }, { 'dataset' => { 'id' => { 'feat' => '-invalid' } } }, 'something something', %w[completely nonsensical] ].each do |data|
       post '/dataset', JSON.dump(data)
       assert_equal 400, last_response.status
     end
