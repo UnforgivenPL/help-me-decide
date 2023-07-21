@@ -41,39 +41,41 @@ module UnforgivenPL
         token&.size == 40 && (user?(token) || dataset?(token))
       end
 
-      def user_allowed?(_, operation, id)
+      def quota_ok?(_, operation)
         # operation is free, or the user has enough request quota (if user token used), or the owner of the dataset has
-        free_action = !QUOTA_OPERATIONS.include?(operation) || (@user && @user.request_quota&.positive?) || (@dataset&.owner&.request_quota&.positive?)
+        result = !QUOTA_OPERATIONS.include?(operation) || (@user && @user.request_quota&.positive?) || (@dataset&.owner&.request_quota&.positive?)
+          # decrease the number of available requests (and increase counter for stats) if needed
+          if result && @dataset && QUOTA_OPERATIONS.include?(operation)
+            owner = @user || @dataset.owner
+            # make sure the requests are reduced even if dataset token is used
+            owner.request_quota -= 1
+            owner.save
+            unless operation == :dataset_slice
+              @dataset.requests += 1
+              @dataset.save
+            end
+          end
+        result
+      end
+
+      def user_allowed?(_, operation, id)
 
         if id
           # with user token the user must be the owner of the dataset
           @dataset ||= DatasetInfo.find_by(folder: id, user_id: @user.id) if @user
-          return false unless @dataset && free_action
+          return false unless @dataset
         else
-          return false unless @user && free_action
+          return false unless @user
         end
 
-        result = case operation
+        case operation
                  when :dataset_list then @user
                  when :dataset_new then @user && (DatasetInfo.where(user_id: @user.id, enabled: true).count < @user.dataset_quota || @user.tier > ADMIN_USER_TIER)
                  when :dataset_get, :questions, :question then @dataset && ((@user && @dataset.user_id == @user.id) || @dataset.folder == id)
                  when :dataset_delete then @dataset && @user && @dataset.user_id == @user.id
                  when :dataset_slice then @dataset && @user && @dataset.user_id == @user.id && (DatasetInfo.where(user_id: @user.id, enabled: true).count < @user.dataset_quota || @user.tier > ADMIN_USER_TIER)
                  else false
-                 end
-        # decrease the number of available requests (and increase counter for stats) if needed
-        if result && @dataset && QUOTA_OPERATIONS.include?(operation)
-          owner = @user || @dataset.owner
-          # make sure the requests are reduced even if dataset token is used
-          owner.request_quota -= 1
-          owner.save
-          unless operation == :dataset_slice
-            @dataset.requests += 1
-            @dataset.save
-          end
-
         end
-        result
       end
 
       def dataset_created(_, _, fingerprint)

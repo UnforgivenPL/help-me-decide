@@ -9,7 +9,7 @@ this directory also provides a somewhat reference implementation that uses Sinat
 datasets and their definitions are expected to be stored separately from questions asked
 authentication and authorisation is done via access tokens; implementations are free to relax or strengthen this 
 
-429 is returned on any request if the authenticated user has run out of available requests
+429 is returned on any request if the dataset's owner has run out of available requests and the operation requires them
 451 is returned on any request if the content is subject to an investigation of being illegal
 401 and 403 are also used
 

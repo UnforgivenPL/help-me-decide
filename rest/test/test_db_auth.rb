@@ -67,6 +67,8 @@ class DbAuthTest < Minitest::Test
 
   def no_content(*tokens, &block) = assert_status(204, tokens, block)
 
+  def no_requests(*tokens, &block) = assert_status(429, tokens, block)
+
   def upload_test_dataset
     dataset = JSON.dump(YAML.load_file(TEST_DATASET))
     post '/dataset', dataset, { 'Authorization' => "Bearer #{TOKEN_ALICE}" }
@@ -143,8 +145,8 @@ class DbAuthTest < Minitest::Test
                                   .map { |s| ->(token) { get(s, nil, { 'Authorization' => "Bearer #{token}" }) } }
                                   .each do |operation|
       assert_equal 0, User.find_by(id: alice.id)&.request_quota
-      forbidden(TOKEN_ALICE, &operation)
-      forbidden(TEST_DATASET_ID, &operation)
+      no_requests(TOKEN_ALICE, &operation)
+      no_requests(TEST_DATASET_ID, &operation)
     end
 
     alice.request_quota = 1000

@@ -45,6 +45,8 @@ module UnforgivenPL
         access_token = actual_header&.[](7..-1)
         throw(:halt, [401, 'unauthenticated']) unless valid_user?(access_token)
         throw(:halt, [403, 'invalid user']) unless user_allowed?(access_token, operation, dataset_id)
+        # quota checking is optional (and by default no quota checks are done)
+        throw(:halt, [429, 'no requests left']) if respond_to?(:quota_ok?) && !quota_ok?(access_token, operation)
         true
       end
 
