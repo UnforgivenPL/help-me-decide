@@ -14,12 +14,18 @@ class DatasetInfo < ActiveRecord::Base
     save
   end
 
-  def to_s = "(folder: #{folder}, user: #{user_id})"
+  def owner
+    @owner ||= User.find(user_id)
+  end
+
+  def to_s = "(folder: #{folder}, owner: #{user_id})"
 
 end
 
 module UnforgivenPL
   module HelpMeDecide
+
+    QUOTA_OPERATIONS = [:dataset_get, :questions, :question, :dataset_slice].freeze
 
     # opens Api to allow user auth through a database
     module DbAuth
@@ -36,12 +42,15 @@ module UnforgivenPL
       end
 
       def user_allowed?(_, operation, id)
+        # operation is free, or the user has enough request quota (if user token used), or the owner of the dataset has
+        free_action = !QUOTA_OPERATIONS.include?(operation) || (@user && @user.request_quota&.positive?) || (@dataset&.owner&.request_quota&.positive?)
+
         if id
           # with user token the user must be the owner of the dataset
           @dataset ||= DatasetInfo.find_by(folder: id, user_id: @user.id) if @user
-          return false unless @dataset&.request_quota&.positive? || (operation == :dataset_delete)
+          return false unless @dataset && free_action
         else
-          return false unless @user
+          return false unless @user && free_action
         end
 
         result = case operation
@@ -52,9 +61,17 @@ module UnforgivenPL
                  when :dataset_slice then @dataset && @user && @dataset.user_id == @user.id && (DatasetInfo.where(user_id: @user.id, enabled: true).count < @user.dataset_quota || @user.tier > ADMIN_USER_TIER)
                  else false
                  end
-        if result && @dataset
-          @dataset.request_quota -= 1
-          @dataset.save
+        # decrease the number of available requests (and increase counter for stats) if needed
+        if result && @dataset && QUOTA_OPERATIONS.include?(operation)
+          owner = @user || @dataset.owner
+          # make sure the requests are reduced even if dataset token is used
+          owner.request_quota -= 1
+          owner.save
+          unless operation == :dataset_slice
+            @dataset.requests += 1
+            @dataset.save
+          end
+
         end
         result
       end

@@ -3,6 +3,7 @@
 source 'https://rubygems.org'
 
 gem 'activerecord'
+gem 'bundler', '2.4.10'
 gem 'help_me_decide', path: '../gem'
 gem 'minitest', group: :test
 gem 'puma'

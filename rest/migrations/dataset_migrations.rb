@@ -9,7 +9,7 @@ class CreateDataset < ActiveRecord::Migration[7.0]
     create_table :dataset_infos do |t|
       t.string :name, :folder, :token
       t.boolean :available, :enabled
-      t.integer :request_quota, default: 1000
+      t.integer :requests, default: 0
       t.timestamps
     end
     add_reference :dataset_infos, :user

@@ -113,7 +113,11 @@ class DbAuthTest < Minitest::Test
     # getting an individual dataset is possible in two cases:
     # - token of the dataset matches
     # - token of the owner of the dataset matches
-    requests_left = 1000
+    alice = User.find_by(token: TOKEN_ALICE)
+
+    requests_left = alice.request_quota
+    assert requests_left > 0
+    requests_made = DatasetInfo.find_by(folder: TEST_DATASET_ID)&.requests
     %w[dataset questions question].map { |s| "/#{s}/#{TEST_DATASET_ID}" }
                                   .map { |s| ->(token) { get(s, nil, { 'Authorization' => "Bearer #{token}" }) } }
                                   .each do |operation|
@@ -121,22 +125,45 @@ class DbAuthTest < Minitest::Test
       forbidden(TOKEN_BOB, &operation)
       allowed(TOKEN_ALICE, &operation)
       allowed(TEST_DATASET_ID, &operation)
-      # now after two successful gets the number of requests available should decrease accordingly
       requests_left -= 2
-      assert_equal requests_left, DatasetInfo.find_by(folder: TEST_DATASET_ID)&.request_quota
+      requests_made += 2
+      # now after two successful gets the number of requests available should decrease accordingly
+      assert_equal requests_left, User.find_by(token: TOKEN_ALICE)&.request_quota
+      assert_equal requests_made, DatasetInfo.find_by(folder: TEST_DATASET_ID)&.requests
     end
+  end
+
+  def test_no_requests_left
+    upload_test_dataset
+    alice = User.find_by(token: TOKEN_ALICE)
+    alice.request_quota = 0
+    alice.save!
+
+    %w[dataset questions question].map { |s| "/#{s}/#{TEST_DATASET_ID}" }
+                                  .map { |s| ->(token) { get(s, nil, { 'Authorization' => "Bearer #{token}" }) } }
+                                  .each do |operation|
+      assert_equal 0, User.find_by(id: alice.id)&.request_quota
+      forbidden(TOKEN_ALICE, &operation)
+      forbidden(TEST_DATASET_ID, &operation)
+    end
+
+    alice.request_quota = 1000
+    alice.save!
   end
 
   def test_slice_dataset
     upload_test_dataset
+    requests_left = User.find_by(token: TOKEN_ALICE)&.request_quota
     operation = ->(token) { put "/dataset/#{TEST_DATASET_ID}", JSON.dump(['margherita']), { 'Authorization' => "Bearer #{token}" } }
     unauthorised(TOKEN_INVALID, TOKEN_NV, TOKEN_NA, &operation)
     forbidden(TOKEN_BOB, &operation)
     allowed(TOKEN_ALICE, &operation)
     sliced_id = last_response.body
     assert sliced_id.size == 40
-    # slicing should reduce number of requests
-    assert_equal 999, DatasetInfo.find_by(folder:TEST_DATASET_ID)&.request_quota
+    # slicing should reduce number of available requests
+    assert_equal requests_left-1, User.find_by(token: TOKEN_ALICE)&.request_quota
+    # but not increase the number of calls
+    assert_equal 0, DatasetInfo.find_by(folder:TEST_DATASET_ID)&.requests
 
     # now it should be ok to fetch the sliced dataset
     operation = ->(token) { get "/dataset/#{sliced_id}", nil, { 'Authorization' => "Bearer #{token}" } }
@@ -155,15 +182,15 @@ class DbAuthTest < Minitest::Test
     assert_nil DatasetInfo.find_by(folder: TEST_DATASET_ID, enabled: true)
     dataset = DatasetInfo.find_by(folder: TEST_DATASET_ID, enabled: false)
 
-    # reduce the number of requests to some number
-    dataset.request_quota = 200
+    # set the number of requests to some number
+    dataset.requests = 200
     dataset.save
 
     upload_test_dataset
     # after uploading a previously deleted dataset the record should be reused
     other = DatasetInfo.find_by(folder: TEST_DATASET_ID, enabled: true)
     assert_equal dataset.id, other.id
-    assert_equal dataset.request_quota, other.request_quota
+    assert_equal dataset.requests, other.requests
     # deleting should not be possible with dataset token, only with user token
     forbidden(TEST_DATASET_ID, &operation)
     assert DatasetInfo.find_by(folder: TEST_DATASET_ID)

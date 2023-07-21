@@ -9,6 +9,7 @@ class CreateUsers < ActiveRecord::Migration[7.0]
       t.boolean :verified, :active
       t.integer :tier, default: 0
       t.integer :dataset_quota, default: 5
+      t.integer :request_quota, default: 1000
       t.timestamps
     end
   end

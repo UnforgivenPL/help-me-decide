@@ -11,6 +11,7 @@
 /spec/reports/
 /spec/examples.txt
 /test/tmp/
+/test/db/
 /test/version_tmp/
 /tmp/
 rest/datasets/
