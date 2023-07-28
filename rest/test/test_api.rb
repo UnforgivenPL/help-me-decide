@@ -165,10 +165,20 @@ class ApiTest < Minitest::Test
     get "/question/#{TEST_DATASET_ID}?topping=gouda"
     assert_equal 200, last_response.status
     actual = last_response.body
+    session_id = JSON.parse(actual)['_session']
     # explicitly stating the strategy should not change anything here
-    get "/question/#{TEST_DATASET_ID}/first_question?topping=gouda"
+    get "/question/#{TEST_DATASET_ID}/first_question?topping=gouda&_session=#{session_id}"
     assert_equal 200, last_response.status
     assert_equal actual, last_response.body
+  end
+
+  def test_session_ids
+    upload_test_dataset
+    # session ids are 64 lowercase hex characters
+    ['', '!', '123abc', 'ABC', '"', 'S', '12345678901234567890123456789012345678901234567890123456789012345'].each do |session|
+      get "/question/#{TEST_DATASET_ID}?_session=#{session}"
+      assert_equal 400, last_response.status, "status failed for #{session}"
+    end
   end
 
   def test_slices
@@ -183,6 +193,22 @@ class ApiTest < Minitest::Test
     get "/dataset/#{new_id}"
     assert_equal 200, last_response.status
     assert_equal dataset.slice('margherita', 'hawaii'), JSON.parse(last_response.body)['dataset']
+  end
+
+  def test_session_sticks
+    upload_test_dataset
+    get "/question/#{TEST_DATASET_ID}"
+    assert_equal 200, last_response.status
+    session = JSON.parse(last_response.body)['_session']
+    assert session && !session.empty?
+    # session passed explicitly is returned in the response
+    get "/question/#{TEST_DATASET_ID}?topping=gouda&_session=#{session}"
+    assert_equal 200, last_response.status
+    assert_equal session, JSON.parse(last_response.body)['_session']
+    # without passing session explicitly, there should be a new session created
+    get "/question/#{TEST_DATASET_ID}?topping=gouda"
+    assert_equal 200, last_response.status
+    assert session != JSON.parse(last_response.body)['_session']
   end
 
 end

@@ -3,13 +3,15 @@
 require 'active_record'
 
 require 'auth/db_auth'
+require 'log/db_log'
 
 require_relative '../migrations/user_migrations'
 require_relative '../migrations/dataset_migrations'
+require_relative '../migrations/log_migrations'
 
 ActiveRecord::Base.establish_connection({ adapter: 'sqlite3', database: 'test/db/hmd_test.sqlite3' })
 
-[CreateUsers, CreateDataset].each { |t| t.new.change }
+[CreateUsers, CreateDataset, CreateLogEntries].each { |t| t.new.change }
 
 TOKEN_NV     = '03b7ee92cb64b2ea2ea20015b2a9f379fdaf5bbb'
 TOKEN_NA     = '0e4bdf6081bfebf2dc26c5db91fb0130eec5224b'
@@ -24,6 +26,7 @@ USER_BOB     = User.new(name: 'bob', pass: 'another password', email: 'bob@examp
 
 class DbAuthApi < UnforgivenPL::HelpMeDecide::Api
   include UnforgivenPL::HelpMeDecide::DbAuth
+  include UnforgivenPL::HelpMeDecide::DbLog
 end
 
 class DbAuthTest < Minitest::Test
@@ -34,7 +37,7 @@ class DbAuthTest < Minitest::Test
   TEST_DATASET_ID = '3c2e6520920c39ffe932f7630445c48eaf342efc'
 
   Minitest.after_run do
-    [DropDataset, DropUsers].each { |t| t.new.change }
+    [DropDataset, DropUsers, DropLogEntries].each { |t| t.new.change }
   end
 
   def app
@@ -46,6 +49,7 @@ class DbAuthTest < Minitest::Test
     FileUtils.rm_rf(UnforgivenPL::HelpMeDecide::Api::DATASET_DIRECTORY)
     FileUtils.mkdir(UnforgivenPL::HelpMeDecide::Api::DATASET_DIRECTORY)
     DatasetInfo.all.each(&:delete)
+    LogEntry.all.each(&:delete)
   end
 
   def assert_status(status = 0, tokens = [], block = nil)
@@ -82,6 +86,7 @@ class DbAuthTest < Minitest::Test
   def test_no_data_at_start
     assert_equal 4, User.all.size
     assert_empty DatasetInfo.all
+    assert_empty LogEntry.all
   end
 
   def test_new_dataset_valid_user
@@ -100,6 +105,10 @@ class DbAuthTest < Minitest::Test
 
     # alice can safely add a dataset
     allowed(TOKEN_ALICE, &operation)
+
+    # only the successful operation is in the logs
+    assert_equal 1, LogEntry.all.size
+    assert_equal "dataset_new", LogEntry.first.operation
   end
 
   def test_list_datasets
@@ -107,6 +116,9 @@ class DbAuthTest < Minitest::Test
     operation = ->(token) { get '/dataset', nil, { 'Authorization' => "Bearer #{token}" } }
     unauthorised(TOKEN_NA, TOKEN_NV, TOKEN_INVALID, &operation)
     allowed(TOKEN_ALICE, TOKEN_BOB, &operation)
+    # only the successful operations are in the logs
+    assert_equal 2, LogEntry.all.size
+    LogEntry.all.each { |entry| assert_equal "dataset_list", entry.operation }
   end
 
   def test_dataset_operations
@@ -123,6 +135,9 @@ class DbAuthTest < Minitest::Test
     %w[dataset questions question].map { |s| "/#{s}/#{TEST_DATASET_ID}" }
                                   .map { |s| ->(token) { get(s, nil, { 'Authorization' => "Bearer #{token}" }) } }
                                   .each do |operation|
+      # make sure no logs
+      LogEntry.all.each(&:delete)
+
       unauthorised(TOKEN_INVALID, TOKEN_NV, TOKEN_NA, &operation)
       forbidden(TOKEN_BOB, &operation)
       allowed(TOKEN_ALICE, &operation)
@@ -132,11 +147,19 @@ class DbAuthTest < Minitest::Test
       # now after two successful gets the number of requests available should decrease accordingly
       assert_equal requests_left, User.find_by(token: TOKEN_ALICE)&.request_quota
       assert_equal requests_made, DatasetInfo.find_by(folder: TEST_DATASET_ID)&.requests
+      # successful operations should also be logged
+      assert_equal 2, LogEntry.all.size
+      # dataset id must be logged
+      LogEntry.all.each { |e| assert_equal TEST_DATASET_ID, e.dataset_id }
+      # question and strategy must be logged if the operation required it
+      LogEntry.all.each { |e| assert e.question && e.strategy if e.operation == 'question' }
     end
   end
 
   def test_no_requests_left
     upload_test_dataset
+    LogEntry.all.each(&:delete)
+
     alice = User.find_by(token: TOKEN_ALICE)
     alice.request_quota = 0
     alice.save!
@@ -147,6 +170,7 @@ class DbAuthTest < Minitest::Test
       assert_equal 0, User.find_by(id: alice.id)&.request_quota
       no_requests(TOKEN_ALICE, &operation)
       no_requests(TEST_DATASET_ID, &operation)
+      assert_empty LogEntry.all
     end
 
     alice.request_quota = 1000

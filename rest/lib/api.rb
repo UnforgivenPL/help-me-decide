@@ -7,6 +7,7 @@ require 'digest'
 require 'fileutils'
 require 'cgi'
 require 'help_me_decide'
+require 'securerandom'
 
 # open String to add helper method to convert itself to a boolean, if applicable
 class String
@@ -28,6 +29,13 @@ class Array
   def unwrap = size == 1 ? first.perhaps_as_bool : self
 end
 
+class Hash
+  def add_if(key, value)
+    self[key] = value if key && value
+    self
+  end
+end
+
 module UnforgivenPL
   module HelpMeDecide
 
@@ -38,8 +46,20 @@ module UnforgivenPL
       DATASET_FILE = 'dataset.yml'
       DEFINITIONS_FILE = 'definitions.yml'
       APPLICATION_VERSION = 'HelpMeDecide 0.1.0'
+      SESSION_ID_LENGTH = 64
+
+      def ensure_session!
+        # session id (either passed or make new)
+        param_session = request.params['_session']
+        throw(:halt, [400, 'bad session id']) if param_session && param_session !~ /^[a-f0-9]{64}$/
+
+        @session = param_session || SecureRandom.hex(SESSION_ID_LENGTH/2)
+      end
 
       def authorise!(operation, dataset_id = nil)
+        @dataset_id = dataset_id
+        @operation = operation
+
         throw(:halt, [500, 'no authorisation method provided; implement :valid_user? and :user_allowed?']) unless respond_to?(:valid_user?) && respond_to?(:user_allowed?)
         actual_header = request.env['HTTP_AUTHORIZATION'] || request.env['Authorization'] || ''
         access_token = actual_header&.[](7..-1)
@@ -47,7 +67,8 @@ module UnforgivenPL
         throw(:halt, [403, 'invalid user']) unless user_allowed?(access_token, operation, dataset_id)
         # quota checking is optional (and by default no quota checks are done)
         throw(:halt, [429, 'no requests left']) if respond_to?(:quota_ok?) && !quota_ok?(access_token, operation)
-        true
+
+        ensure_session!
       end
 
       def save_dataset(incoming)
@@ -68,21 +89,26 @@ module UnforgivenPL
 
         dataset_yaml = dataset.to_yaml
 
-        fingerprint = respond_to?(:dataset_fingerprint) ? dataset_fingerprint(dataset) : Digest::SHA1.hexdigest(dataset_yaml)
+        @dataset_id = respond_to?(:dataset_fingerprint) ? dataset_fingerprint(dataset) : Digest::SHA1.hexdigest(dataset_yaml)
 
-        return [500, 'directory already exists; problem reported'] if Dir.exist?(File.join(DATASET_DIRECTORY, fingerprint))
+        return [500, 'directory already exists; problem reported'] if Dir.exist?(File.join(DATASET_DIRECTORY, @dataset_id))
 
-        return [500, 'filesystem error; problem reported'] unless Dir.mkdir(File.join(DATASET_DIRECTORY, fingerprint))
-        return [500, 'cannot write dataset file; problem reported'] unless File.write(File.join(DATASET_DIRECTORY, fingerprint, DATASET_FILE), dataset_yaml)
-        return [500, 'cannot write definitions file; problem reported'] unless File.write(File.join(DATASET_DIRECTORY, fingerprint, DEFINITIONS_FILE), definition.pure.to_yaml)
+        return [500, 'filesystem error; problem reported'] unless Dir.mkdir(File.join(DATASET_DIRECTORY, @dataset_id))
+        return [500, 'cannot write dataset file; problem reported'] unless File.write(File.join(DATASET_DIRECTORY, @dataset_id, DATASET_FILE), dataset_yaml)
+        return [500, 'cannot write definitions file; problem reported'] unless File.write(File.join(DATASET_DIRECTORY, @dataset_id, DEFINITIONS_FILE), definition.pure.to_yaml)
 
-        dataset_created(dataset, definition, fingerprint) if respond_to?(:dataset_created)
+        dataset_created(dataset, definition, @dataset_id) if respond_to?(:dataset_created)
 
-        [200, fingerprint]
+        [200, @dataset_id]
       end
 
       before do
         throw(:halt, [500, 'server filesystem error - no dataset directory']) unless Dir.exist?(DATASET_DIRECTORY)
+      end
+
+      after do
+        # log only successful responses
+        log(session_id: @session, operation: @operation, dataset: @dataset_id, answers: @answers, strategy: @strategy, question: @question) if respond_to?(:log) && response.status/100 == 2
       end
 
       get '/' do
@@ -163,7 +189,7 @@ module UnforgivenPL
       get %r{/dataset/([a-fA-F0-9]{40})} do |id|
         authorise!(:dataset_get, id)
         dataset, definitions = read_dataset(id)
-        json({ 'definition' => definitions, 'dataset' => dataset, 'strategies' => UnforgivenPL::HelpMeDecide::Strategies::AVAILABLE_STRATEGIES })
+        json({ 'definition' => definitions, 'dataset' => dataset, 'strategies' => UnforgivenPL::HelpMeDecide::Strategies::AVAILABLE_STRATEGIES }.add_if('_session', @session))
       end
 
       delete %r{/dataset/([a-fA-F0-9]{40})} do |id|
@@ -174,15 +200,16 @@ module UnforgivenPL
       end
 
       def read_answers(request)
-        CGI.parse(request.query_string).transform_values(&:unwrap)
+        # params that start with _ are internal and thus removed
+        CGI.parse(request.query_string).transform_values(&:unwrap).delete_if { |k| k.start_with?('_') }
       end
 
       get %r{/questions/([a-fA-F0-9]{40})} do |id|
         authorise!(:questions, id)
-        answers = read_answers(request).transform_values { |value| value.to_s.maybe_raw }
-        dataset, definitions = read_dataset(id, answers)
+        @answers = read_answers(request).transform_values { |value| value.to_s.maybe_raw }
+        dataset, definitions = read_dataset(id, @answers)
 
-        json({'definition' => definitions.pure, 'dataset' => dataset, 'strategies' => UnforgivenPL::HelpMeDecide::Strategies::AVAILABLE_STRATEGIES, 'questions' => dataset.questions, 'answers' => answers})
+        json({'definition' => definitions.pure, 'dataset' => dataset, 'strategies' => UnforgivenPL::HelpMeDecide::Strategies::AVAILABLE_STRATEGIES, 'questions' => dataset.questions, 'answers' => @answers}.add_if('_session', @session))
       end
 
       get %r{/question/([a-fA-F0-9]{40})(/([a-z_]{1,32}))?} do |id, _, strategy|
@@ -191,12 +218,12 @@ module UnforgivenPL
         strategy = strategy.to_sym unless strategy.is_a?(Symbol)
         throw(:halt, [400, 'incorrect strategy']) unless UnforgivenPL::HelpMeDecide::Strategies::AVAILABLE_STRATEGIES.include?(strategy)
 
-        answers = read_answers(request)
-        dataset, definitions = read_dataset(id, answers)
+        @answers = read_answers(request)
+        dataset, definitions = read_dataset(id, @answers)
 
-        question = dataset.questions.pick(strategy)
+        @question = dataset.questions.pick(@strategy = strategy)
 
-        json({'definition' => definitions.pure, 'dataset' => dataset, 'strategies' => UnforgivenPL::HelpMeDecide::Strategies::AVAILABLE_STRATEGIES, 'question' => question, 'answers' => answers})
+        json({'definition' => definitions.pure, 'dataset' => dataset, 'strategies' => UnforgivenPL::HelpMeDecide::Strategies::AVAILABLE_STRATEGIES, 'question' => @question, 'answers' => @answers}.add_if('_session', @session))
       end
 
     end # class Api

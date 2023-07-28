@@ -19,6 +19,10 @@ the accepted format data format is JSON, both for request and response
 
 requests that have body expect to have named parts (so a body must be a map)
 
+## logging
+
+responses may return session identifier (`_session`) that appears in the logs (if those are enabled); passing it as an argument to requests allows continuing the session
+
 # datasets
 
 datasets are immutable
